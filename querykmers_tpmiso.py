@@ -7,6 +7,15 @@ class SimpleBloomFilter:
 		self.bit_array = [0] * size
 
 	def _hashes(self, item):
+		"""
+		Examples:
+		>>> bloom_filter = SimpleBloomFilter(size=10, num_hashes=5)
+		>>> hashes = bloom_filter._hashes("ATCG")
+		>>> len(hashes)
+		5
+		>>> min(hashes) >= 0 and max(hashes) < 10
+		True
+		"""
 		hash_values = []
 		for i in range(self.num_hashes):
 			hash_func = hashlib.sha256((str(i) + item).encode()).hexdigest()
@@ -14,13 +23,58 @@ class SimpleBloomFilter:
 		return hash_values
 
 	def add(self, item):
+		"""
+		Example:
+		>>> bloom_filter = SimpleBloomFilter(size=10, num_hashes=5)
+		>>> bloom_filter.add("ATCG")
+		>>> any(bloom_filter.bit_array)
+		True
+		
+		# Cas extrême : ajout d'un kmer vide
+		>>> bloom_filter.add("")  
+        >>> any(bloom_filter.bit_array)
+        True
+		"""
 		for pos in self._hashes(item):
 			self.bit_array[pos] = 1
 
 	def contains(self, item):
+		"""
+		Example:
+		>>> bloom_filter = SimpleBloomFilter(size=10, num_hashes=5)
+		>>> bloom_filter.add("ATCG")
+		>>> bloom_filter.contains("ATCG")
+		True
+		>>> bloom_filter.contains("AAAA")
+		False
+
+		# Cas extrême : recherche vide
+		>>> bloom_filter.contains("")
+		False
+		"""
 		return all(self.bit_array[pos] for pos in self._hashes(item))
 
 	def merge(self, other):
+		"""
+		example:
+		>>> bloom_filter_Bleu = SimpleBloomFilter(size=10, num_hashes=5)
+		>>> bloom_filter_Jaune = SimpleBloomFilter(size=10, num_hashes=5)
+		>>> bloom_filter_Bleu.add("AAAA")
+		>>> bloom_filter_Jaune.add("TTTT")
+		>>> bloom_filter_Vert = bloom_filter_Bleu.merge(bloom_filter_Jaune)
+		>>> bloom_filter_Vert.contains("AAAA")
+		True
+		>>> bloom_filter_Vert.contains("TTTT")
+		True
+
+		# Cas extrême : merge avec un filtre vide
+		>>> bloom_filter = SimpleBloomFilter(size=10, num_hashes=5)
+		>>> bloom_filter.add("ATCG")
+		>>> bloom_filter_vide = SimpleBloomFilter(size=10, num_hashes=5)
+		>>> bloom_filter_merged = bloom_filter.merge(bloom_filter_vide)
+		>>> bloom_filter_merged.contains("ATCG")
+		True
+		"""
 		assert self.size == other.size, "Bloom filters must be of the same size!"
 		merged_filter = SimpleBloomFilter(self.size, self.num_hashes)
 		merged_filter.bit_array = [a | b for a, b in zip(self.bit_array, other.bit_array)]
@@ -40,6 +94,27 @@ class Structure:
 		self.root = self._build_tree(datasets, kmers_dict, bloom_size, num_hashes)
 
 	def _build_tree(self, datasets, kmers_dict, bloom_size, num_hashes):
+		"""
+		Example:
+		>>> datasets = ["dataset1", "dataset2"]
+		>>> kmers_dict = {"dataset1" : ["AAAA"], "dataset2" : ["TTTT"]}
+		>>> structure = Structure(datasets, kmers_dict, bloom_size=10, num_hashes=5)
+		>>> structure.root.left.datasets
+		['dataset1']
+		>>> structure.root.right.datasets
+		['dataset2']
+		>>> sorted(structure.leaves.keys())
+		['dataset1', 'dataset2']
+		>>> sorted(structure.root.datasets)
+		['dataset1', 'dataset2']
+
+		# Cas extrême : pas de datasets
+		>>> datasets = []
+		>>> kmers_dict = {}
+		>>> structure = Structure(datasets, kmers_dict, bloom_size=10, num_hashes=5)
+		>>> structure.root is None
+		True
+		"""
 		nodes = []
 
 		# Step 1
@@ -70,11 +145,35 @@ class Structure:
 		return nodes[0] if nodes else None  
 
 	def query(self, kmer):
+		"""
+		Example:
+        >>> datasets = ["dataset1", "dataset2"]
+        >>> kmers_dict = {"dataset1": ["ATCG", "AAAA"], "dataset2": ["ACGT", "AAAA"]}
+        >>> structure = Structure(datasets, kmers_dict, bloom_size=100, num_hashes=5)
+        >>> structure.query("ATCG")
+        ['dataset1']
+        >>> structure.query("ACGT")
+        ['dataset2']
+        >>> structure.query("TTTT")
+        []
+        >>> structure.query("AAAA")
+        ['dataset1', 'dataset2']
+		"""
 		results = []
 		self._query_recursive(self.root, kmer, results)
 		return results
 
 	def _query_recursive(self, node, kmer, results):
+		"""
+		Example:
+        >>> datasets = ["dataset"]
+        >>> kmers_dict = {"dataset": ["ATCG", "AAAA"]}
+        >>> structure = Structure(datasets, kmers_dict)
+        >>> results = []
+        >>> structure._query_recursive(structure.root, "AAAA", results)
+        >>> results
+        ['dataset']
+		"""
 		if node is None:
 			return
 		if node.bloom.contains(kmer): 
